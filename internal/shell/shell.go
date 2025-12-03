@@ -50,7 +50,7 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 
 func (s *Shell) Run() error {
 	for {
-		fmt.Fprintln(s.Out, "$")
+		fmt.Fprint(s.Out, "$ ")
 
 		line, err := s.in.ReadString('\n')
 
