@@ -10,7 +10,7 @@ import (
 func (s *Shell) registerBuiltins() {
 
 	s.builtins["echo"] = func(args []string, s *Shell) error {
-		fmt.Fprintln(s.Out, strings.Join(args, ""))
+		fmt.Fprintln(s.Out, strings.Join(args, " "))
 		return nil
 	}
 
