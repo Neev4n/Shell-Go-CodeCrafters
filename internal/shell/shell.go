@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -82,11 +83,31 @@ func (s *Shell) Run() error {
 			continue
 		}
 
+		if err := s.ExecuteInternal(cmd, args); err == nil {
+			continue
+		}
+
 		// not found
 		fmt.Fprintln(s.Out, cmd+": command not found")
 
 	}
 
+}
+
+func (s *Shell) ExecuteInternal(name string, args []string) error {
+	//check look up
+	if pathToCheck, ok := s.Lookup(name); ok {
+		extCmd := exec.Command(pathToCheck, args...)
+		extCmd.Args = append([]string{name}, args...)
+		extCmd.Stdout = s.Out
+		extCmd.Stderr = s.Err
+		extCmd.Run()
+
+	} else {
+		fmt.Fprintln(s.Out, name+": not found")
+	}
+
+	return nil
 }
 
 // func Lookup
