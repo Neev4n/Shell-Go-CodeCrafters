@@ -3,7 +3,6 @@ package shell
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -33,16 +32,9 @@ func (s *Shell) registerBuiltins() {
 			return nil
 		}
 
-		for _, dir := range s.pathDirs {
-
-			pathToCheck := filepath.Join(dir, name)
-
-			if info, err := os.Stat(pathToCheck); err == nil {
-				if info.Mode().IsRegular() && info.Mode()&0111 != 0 {
-					fmt.Fprintln(s.Out, name, "is", pathToCheck)
-					return nil
-				}
-			}
+		if path, ok := s.Lookup(name); ok {
+			fmt.Fprintln(s.Out, name, "is", path)
+			return nil
 		}
 
 		fmt.Fprintln(s.Out, name+": not found")
@@ -58,5 +50,23 @@ func (s *Shell) registerBuiltins() {
 		}
 
 		return nil
+	}
+
+	s.builtins["cd"] = func(args []string, s *Shell) error {
+
+		if len(args) == 0 {
+			return nil
+		}
+
+		name := args[0]
+		if path, ok := s.Lookup(name); ok {
+			if err := os.Chdir(path); err == nil {
+				return nil
+			}
+		}
+
+		fmt.Fprintf(s.Err, "cd: %s: No such file or directory", name)
+		return nil
+
 	}
 }
