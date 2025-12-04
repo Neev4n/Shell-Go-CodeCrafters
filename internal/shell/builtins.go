@@ -3,6 +3,7 @@ package shell
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -54,18 +55,47 @@ func (s *Shell) registerBuiltins() {
 
 	s.builtins["cd"] = func(args []string, s *Shell) error {
 
+		var target string
+
 		if len(args) == 0 {
-			return nil
+			target = os.Getenv("HOME")
+			if target == "" {
+				return nil //no home variable set
+			}
+
+		} else {
+			target = args[0]
 		}
 
-		name := args[0]
-		if path, ok := s.Lookup(name); ok {
-			if err := os.Chdir(path); err == nil {
+		if strings.HasSuffix(target, "~") {
+			home := os.Getenv("HOME")
+			if home == "" {
+				fmt.Fprintln(s.Err, "cd: HOME not set")
+				return nil
+			}
+
+			if target == "~" {
+				target = home
+			} else if strings.HasSuffix(target, "~/") {
+				target = filepath.Join(home, target[2:])
+			} else {
+				fmt.Fprintf(s.Err, "cd: unsupported user expansion: %s\n", target)
 				return nil
 			}
 		}
 
-		fmt.Fprintf(s.Err, "cd: %s: No such file or directory\n", name)
+		if err := os.Chdir(target); err != nil {
+
+			if os.IsNotExist(err) {
+				fmt.Fprintf(s.Err, "cd: %s: No such file or directory\n", target)
+			} else if os.IsPermission(err) {
+				fmt.Fprintf(s.Err, "cd: %s: Permission denied\n", target)
+			} else {
+				fmt.Fprintf(s.Err, "cd: %s: %v", target, err)
+			}
+
+		}
+
 		return nil
 
 	}
