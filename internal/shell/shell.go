@@ -2,11 +2,11 @@ package shell
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -24,6 +24,7 @@ type Shell struct {
 	Err      io.Writer
 	pathDirs []string
 	builtins map[string]Builtin
+	executor Executor
 }
 
 // func New
@@ -43,6 +44,7 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 		builtins: make(map[string]Builtin),
 	}
 
+	s.executor = &DefaultExectuor{LookupFunc: s.Lookup}
 	s.registerBuiltins()
 	return s
 }
@@ -83,31 +85,31 @@ func (s *Shell) Run() error {
 			continue
 		}
 
-		if err := s.ExecuteInternal(cmd, args); err == nil {
+		ioBinding := IOBindings{
+			Stdin:  nil,
+			Stdout: s.Out,
+			Stderr: s.Err,
+		}
+
+		exitCode, err := s.executor.Execute(context.Background(), cmd, args, ioBinding)
+
+		if errors.Is(err, ErrNotFound) {
+			fmt.Fprintln(s.Out, cmd+": command not found")
 			continue
 		}
+
+		if err != nil {
+			fmt.Fprintln(s.Err, "error running command:", err)
+			continue
+		}
+
+		_ = exitCode
 
 		// not found
 		fmt.Fprintln(s.Out, cmd+": command not found")
 
 	}
 
-}
-
-func (s *Shell) ExecuteInternal(name string, args []string) error {
-	//check look up
-	if pathToCheck, ok := s.Lookup(name); ok {
-		extCmd := exec.Command(pathToCheck, args...)
-		extCmd.Args = append([]string{name}, args...)
-		extCmd.Stdout = s.Out
-		extCmd.Stderr = s.Err
-		extCmd.Run()
-
-	} else {
-		fmt.Fprintln(s.Out, name+": not found")
-	}
-
-	return nil
 }
 
 // func Lookup
