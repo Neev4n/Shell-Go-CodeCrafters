@@ -105,9 +105,6 @@ func (s *Shell) Run() error {
 
 		_ = exitCode
 
-		// not found
-		fmt.Fprintln(s.Out, cmd+": command not found")
-
 	}
 
 }
