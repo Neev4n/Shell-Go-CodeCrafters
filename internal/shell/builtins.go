@@ -65,7 +65,7 @@ func (s *Shell) registerBuiltins() {
 			}
 		}
 
-		fmt.Fprintf(s.Err, "cd: %s: No such file or directory", name)
+		fmt.Fprintf(s.Err, "cd: %s: No such file or directory\n", name)
 		return nil
 
 	}
