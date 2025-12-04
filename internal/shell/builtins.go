@@ -39,13 +39,24 @@ func (s *Shell) registerBuiltins() {
 
 			if info, err := os.Stat(pathToCheck); err == nil {
 				if info.Mode().IsRegular() && info.Mode()&0111 != 0 {
-					fmt.Fprintln(os.Stdout, name, "is", pathToCheck)
+					fmt.Fprintln(s.Out, name, "is", pathToCheck)
 					return nil
 				}
 			}
 		}
 
 		fmt.Fprintln(s.Out, name+": not found")
+		return nil
+	}
+
+	s.builtins["pwd"] = func(args []string, s *Shell) error {
+		dir, err := os.Getwd()
+		if err == nil {
+			fmt.Fprintln(s.Out, dir)
+		} else {
+			fmt.Fprintln(s.Err, "error finding directory:", err)
+		}
+
 		return nil
 	}
 }
