@@ -25,6 +25,7 @@ type Shell struct {
 	pathDirs []string
 	builtins map[string]Builtin
 	executor Executor
+	parser   Parser
 }
 
 // func New
