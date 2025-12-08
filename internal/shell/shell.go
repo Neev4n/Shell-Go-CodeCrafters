@@ -68,7 +68,12 @@ func (s *Shell) Run() error {
 			continue
 		}
 
-		fields := strings.Fields(line)
+		fields, err := s.parser.Parse(line)
+
+		if err != nil {
+			return err
+		}
+
 		cmd := fields[0]
 		args := []string{}
 		if len(fields) > 1 {
