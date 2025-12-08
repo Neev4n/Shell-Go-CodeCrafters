@@ -46,6 +46,7 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 	}
 
 	s.executor = &DefaultExectuor{LookupFunc: s.Lookup}
+	s.parser = NewDefaultParser()
 	s.registerBuiltins()
 	return s
 }
