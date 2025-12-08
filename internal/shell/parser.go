@@ -88,15 +88,15 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 		switch currState {
 		case stateOutside:
 			if unicode.IsSpace(ch) {
+
 				if !tb.isEmpty() {
 					args = append(args, tb.flush())
 				}
+				currState = stateOutside
 
 			} else if ch == '\'' {
 				currState = stateSingleQuote
-				if !tb.isEmpty() {
-					args = append(args, tb.flush())
-				}
+
 			} else {
 				tb.appendRune(ch)
 			}
@@ -104,9 +104,7 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 		case stateSingleQuote:
 			if ch == '\'' {
 				currState = stateOutside
-				if !tb.isEmpty() {
-					args = append(args, tb.flush())
-				}
+
 			} else {
 				tb.appendRune(ch)
 			}
