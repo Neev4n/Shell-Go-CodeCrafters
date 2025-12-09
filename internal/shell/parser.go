@@ -129,8 +129,6 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 			if ch == '"' {
 				currState = stateOutside
 
-			} else if ch == '\\' {
-				escaping = true
 			} else {
 				tb.appendRune(ch)
 			}
