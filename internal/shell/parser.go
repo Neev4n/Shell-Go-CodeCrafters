@@ -93,18 +93,15 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 			return nil, err
 		}
 
-		if escaping {
-
-			if currState == stateDoubleQuote && (ch != '\\' && ch != '"') {
-				continue
-			}
-			tb.appendRune(ch)
-			escaping = false
-			continue
-		}
-
 		switch currState {
 		case stateOutside:
+
+			if escaping {
+				tb.appendRune(ch)
+				escaping = false
+				continue
+			}
+
 			if unicode.IsSpace(ch) {
 
 				args = tb.flushIfNotEmpty(args)
@@ -130,9 +127,18 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 			}
 
 		case stateDoubleQuote:
+
+			if escaping && (ch == '"' || ch == '\\') {
+				tb.appendRune(ch)
+				escaping = false
+				continue
+			}
+
 			if ch == '"' {
 				currState = stateOutside
 
+			} else if ch == '\\' {
+				escaping = true
 			} else {
 				tb.appendRune(ch)
 			}
