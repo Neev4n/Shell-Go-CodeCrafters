@@ -128,10 +128,17 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 
 		case stateDoubleQuote:
 
-			if escaping && (ch == '"' || ch == '\\') {
-				tb.appendRune(ch)
+			if escaping {
+				if ch == '"' || ch == '\\' {
+					tb.appendRune(ch)
+
+				} else {
+					tb.appendRune('\\')
+				}
+
 				escaping = false
 				continue
+
 			}
 
 			if ch == '"' {
