@@ -38,6 +38,7 @@ type parseSate int
 const (
 	stateOutside parseSate = iota
 	stateSingleQuote
+	stateDoubleQuote
 )
 
 type tokenBuffer struct {
@@ -97,12 +98,22 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 			} else if ch == '\'' {
 				currState = stateSingleQuote
 
+			} else if ch == '"' {
+				currState = stateDoubleQuote
 			} else {
 				tb.appendRune(ch)
 			}
 
 		case stateSingleQuote:
 			if ch == '\'' {
+				currState = stateOutside
+
+			} else {
+				tb.appendRune(ch)
+			}
+
+		case stateDoubleQuote:
+			if ch == '"' {
 				currState = stateOutside
 
 			} else {
