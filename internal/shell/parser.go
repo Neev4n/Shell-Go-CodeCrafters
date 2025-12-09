@@ -94,6 +94,10 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 		}
 
 		if escaping {
+
+			if currState == stateDoubleQuote && (ch != '\\' && ch != '"') {
+				continue
+			}
 			tb.appendRune(ch)
 			escaping = false
 			continue
