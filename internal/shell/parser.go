@@ -8,7 +8,8 @@ import (
 )
 
 var (
-	ErrUnclosedQuote = errors.New("unclosed quote")
+	ErrUnclosedQuote      = errors.New("unclosed quote")
+	ErrUnescapedCharacter = errors.New("unescaped character")
 )
 
 type Parser interface {
@@ -61,10 +62,15 @@ func (tb *tokenBuffer) appendRune(r rune) {
 	tb.b.WriteRune(r)
 }
 
-func (tb *tokenBuffer) flush() string {
-	s := tb.b.String()
-	tb.b.Reset()
-	return s
+func (tb *tokenBuffer) flushIfNotEmpty(args []string) []string {
+	if !tb.isEmpty() {
+		s := tb.b.String()
+		tb.b.Reset()
+		args = append(args, s)
+	}
+
+	return args
+
 }
 
 func (p *DefaultParser) Parse(line string) ([]string, error) {
@@ -74,6 +80,7 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 	args := []string{}
 
 	currState := stateOutside
+	escaping := false
 
 	for {
 		ch, _, err := r.ReadRune()
@@ -86,13 +93,17 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 			return nil, err
 		}
 
+		if escaping {
+			tb.appendRune(ch)
+			escaping = false
+			continue
+		}
+
 		switch currState {
 		case stateOutside:
 			if unicode.IsSpace(ch) {
 
-				if !tb.isEmpty() {
-					args = append(args, tb.flush())
-				}
+				args = tb.flushIfNotEmpty(args)
 				currState = stateOutside
 
 			} else if ch == '\'' {
@@ -100,6 +111,8 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 
 			} else if ch == '"' {
 				currState = stateDoubleQuote
+			} else if ch == '\\' {
+				escaping = true
 			} else {
 				tb.appendRune(ch)
 			}
@@ -116,6 +129,8 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 			if ch == '"' {
 				currState = stateOutside
 
+			} else if ch == '\\' {
+				escaping = true
 			} else {
 				tb.appendRune(ch)
 			}
@@ -128,9 +143,11 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 		return nil, ErrUnclosedQuote
 	}
 
-	if !tb.isEmpty() {
-		args = append(args, tb.flush())
+	if escaping {
+		return nil, ErrUnescapedCharacter
 	}
+
+	args = tb.flushIfNotEmpty(args)
 
 	return args, nil
 
