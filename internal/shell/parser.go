@@ -34,10 +34,10 @@ func NewDefaultParser() *DefaultParser {
 	return d
 }
 
-type parseSate int
+type parseState int
 
 const (
-	stateOutside parseSate = iota
+	stateOutside parseState = iota
 	stateSingleQuote
 	stateDoubleQuote
 )
@@ -73,6 +73,73 @@ func (tb *tokenBuffer) flushIfNotEmpty(args []string) []string {
 
 }
 
+func handleStateOutside(ch rune, currState parseState, tb *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+
+	if escaping {
+		tb.appendRune(ch)
+		escaping = false
+		return currState, escaping, args
+	}
+
+	if unicode.IsSpace(ch) {
+
+		args = tb.flushIfNotEmpty(args)
+
+	} else if ch == '\'' {
+		currState = stateSingleQuote
+
+	} else if ch == '"' {
+		currState = stateDoubleQuote
+	} else if ch == '\\' {
+		escaping = true
+	} else {
+		tb.appendRune(ch)
+	}
+
+	return currState, escaping, args
+
+}
+
+func handleStateSingleQuote(ch rune, currState parseState, tb *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+
+	if ch == '\'' {
+		currState = stateOutside
+
+	} else {
+		tb.appendRune(ch)
+	}
+
+	return currState, escaping, args
+
+}
+
+func handleStateDoubleQuote(ch rune, currState parseState, tb *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+
+	if escaping {
+		if ch != '\\' && ch != '"' {
+			tb.appendRune('\\')
+		}
+
+		tb.appendRune(ch)
+
+		escaping = false
+		return currState, escaping, args
+
+	}
+
+	if ch == '"' {
+		currState = stateOutside
+
+	} else if ch == '\\' {
+		escaping = true
+	} else {
+		tb.appendRune(ch)
+	}
+
+	return currState, escaping, args
+
+}
+
 func (p *DefaultParser) Parse(line string) ([]string, error) {
 	r := p.newReader(line)
 	tb := newTokenBuffer(p.newBuilder())
@@ -95,60 +162,13 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 
 		switch currState {
 		case stateOutside:
-
-			if escaping {
-				tb.appendRune(ch)
-				escaping = false
-				continue
-			}
-
-			if unicode.IsSpace(ch) {
-
-				args = tb.flushIfNotEmpty(args)
-				currState = stateOutside
-
-			} else if ch == '\'' {
-				currState = stateSingleQuote
-
-			} else if ch == '"' {
-				currState = stateDoubleQuote
-			} else if ch == '\\' {
-				escaping = true
-			} else {
-				tb.appendRune(ch)
-			}
+			currState, escaping, args = handleStateOutside(ch, currState, tb, escaping, args)
 
 		case stateSingleQuote:
-			if ch == '\'' {
-				currState = stateOutside
-
-			} else {
-				tb.appendRune(ch)
-			}
+			currState, escaping, args = handleStateSingleQuote(ch, currState, tb, escaping, args)
 
 		case stateDoubleQuote:
-
-			if escaping {
-				if ch != '\\' && ch != '"' {
-					tb.appendRune('\\')
-				}
-
-				tb.appendRune(ch)
-
-				escaping = false
-				continue
-
-			}
-
-			if ch == '"' {
-				currState = stateOutside
-
-			} else if ch == '\\' {
-				escaping = true
-			} else {
-				tb.appendRune(ch)
-			}
-
+			currState, escaping, args = handleStateDoubleQuote(ch, currState, tb, escaping, args)
 		}
 
 	}
