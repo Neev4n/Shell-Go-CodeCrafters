@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Neev4n/CodeCrafters-Shell-GO/codecrafters-shell-go/pkg/shell"
 )
 
 // exit error
@@ -25,7 +27,7 @@ type Shell struct {
 	pathDirs []string
 	builtins map[string]Builtin
 	executor Executor
-	parser   Parser
+	parser   shell.Parser
 }
 
 // func New
@@ -46,7 +48,7 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 	}
 
 	s.executor = &DefaultExectuor{LookupFunc: s.Lookup}
-	s.parser = NewDefaultParser()
+	s.parser = shell.NewDefaultParser()
 	s.registerBuiltins()
 	return s
 }
