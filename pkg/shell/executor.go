@@ -15,10 +15,6 @@ type IOBindings struct {
 	Stderr io.Writer
 }
 
-type Executor interface {
-	Execute(ctx context.Context, name string, args []string, io IOBindings) (int, error)
-}
-
 type DefaultExectuor struct {
 	LookupFunc func(name string) (string, bool)
 }

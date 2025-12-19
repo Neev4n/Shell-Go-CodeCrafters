@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/Neev4n/CodeCrafters-Shell-GO/codecrafters-shell-go/internal/shell"
+	"github.com/Neev4n/CodeCrafters-Shell-GO/codecrafters-shell-go/pkg/shell"
 )
 
 // Ensures gofmt doesn't remove the "fmt" and "os" imports in stage 1 (feel free to remove this!)

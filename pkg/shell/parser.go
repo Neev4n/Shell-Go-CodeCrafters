@@ -12,10 +12,6 @@ var (
 	ErrUnescapedCharacter = errors.New("unescaped character")
 )
 
-type Parser interface {
-	Parse(line string) ([]string, error)
-}
-
 type DefaultParser struct {
 	newReader  func(string) io.RuneReader
 	newBuilder func() *strings.Builder
