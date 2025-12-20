@@ -234,6 +234,29 @@ func (s *Shell) prepareIOforRedirection(args []string) ([]string, IOBindings, fu
 
 		}
 
+		if arg == ">>" || arg == "1>>" {
+			if i == len(args)-1 {
+				fmt.Fprintln(s.Err, "redirect error:", ErrMissingRedirectDestination)
+				return nil, ioBindings, nil, false
+			}
+
+			dest := args[i+1]
+
+			f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+
+				fmt.Fprintf(s.Err, "open failed: %v", err)
+				return nil, ioBindings, nil, false
+
+			}
+
+			ioBindings.Stdout = f
+			closeFuncs = append(closeFuncs, func() { f.Close() })
+			i += 2
+			continue
+
+		}
+
 		newArgs = append(newArgs, arg)
 		i++
 
