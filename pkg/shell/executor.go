@@ -15,11 +15,11 @@ type IOBindings struct {
 	Stderr io.Writer
 }
 
-type DefaultExectuor struct {
+type DefaultExecutuor struct {
 	LookupFunc func(name string) (string, bool)
 }
 
-func (e *DefaultExectuor) Execute(ctx context.Context, name string, args []string, io IOBindings) (int, error) {
+func (e *DefaultExecutuor) Execute(ctx context.Context, name string, args []string, io IOBindings) (int, error) {
 
 	path, ok := e.LookupFunc(name)
 

@@ -45,7 +45,7 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 		builtins: make(map[string]Builtin),
 	}
 
-	s.executor = &DefaultExectuor{LookupFunc: s.Lookup}
+	s.executor = &DefaultExecutuor{LookupFunc: s.Lookup}
 	s.parser = NewDefaultParser()
 	s.registerBuiltins()
 	return s
