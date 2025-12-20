@@ -97,32 +97,63 @@ func (s *Shell) Run() error {
 			args = fields[1:]
 		}
 
-		args, ok := s.updateForRedirect(args)
+		cleanArgs, ioBindings, cleanup, ok := s.prepareIOforRedirection(args)
 
 		if !ok {
 			continue
 		}
 
+		if cleanup != nil {
+			defer cleanup()
+		}
+
 		// check built ins
 		if fn, ok := s.builtins[cmd]; ok {
-			if err := fn(args, s); err != nil {
+
+			prevErr := s.Err
+			prevOut := s.Out
+
+			if ioBindings.Stderr != nil {
+				s.Err = ioBindings.Stderr
+			}
+
+			if ioBindings.Stdout != nil {
+				s.Out = ioBindings.Stdout
+			}
+
+			if err := fn(cleanArgs, s); err != nil {
+
+				s.Out = prevOut
+				s.Err = prevErr
+
 				if errors.Is(err, ErrExit) {
+
+					if cleanup != nil {
+						cleanup()
+					}
+
 					return nil
 				}
 
 				fmt.Fprintln(s.Err, "builtin error:", err)
+			} else {
+				s.Out = prevOut
+				s.Err = prevErr
 			}
+
+			if cleanup != nil {
+				cleanup()
+			}
+
 			continue
 		}
 
-		ioBinding := IOBindings{
-			Stdin:  nil,
-			Stdout: s.Out,
-			Stderr: s.Err,
+		if cleanup != nil {
+			cleanup()
 		}
 
 		//execute command
-		exitCode, err := s.executor.Execute(context.Background(), cmd, args, ioBinding)
+		exitCode, err := s.executor.Execute(context.Background(), cmd, cleanArgs, ioBindings)
 
 		if errors.Is(err, ErrNotFound) {
 			fmt.Fprintln(s.Err, cmd+": command not found")
@@ -140,14 +171,27 @@ func (s *Shell) Run() error {
 
 }
 
-func (s *Shell) updateForRedirect(args []string) ([]string, bool) {
+func (s *Shell) prepareIOforRedirection(args []string) ([]string, IOBindings, func(), bool) {
 
-	// contains redirect
-	for i, arg := range args {
+	ioBindings := IOBindings{
+		Stdin:  nil,
+		Stdout: s.Out,
+		Stderr: s.Err,
+	}
+
+	newArgs := make([]string, 0, len(args))
+	var closeFuncs []func()
+
+	i := 0
+
+	for i < len(args) {
+
+		arg := args[i]
+
 		if arg == ">" || arg == "1>" {
 			if i == len(args)-1 {
 				fmt.Fprintln(s.Err, "redirect error:", ErrMissingRedirectDestination)
-				return []string{}, false
+				return nil, ioBindings, nil, false
 			}
 
 			dest := args[i+1]
@@ -156,20 +200,29 @@ func (s *Shell) updateForRedirect(args []string) ([]string, bool) {
 			if err != nil {
 
 				fmt.Fprintf(s.Err, "open failed: %v", err)
-				return []string{}, false
+				return nil, ioBindings, nil, false
 
 			}
 
-			s.redirectBinding.file = f
-			s.redirectBinding.prevOut = s.Out
-			s.Out = f
+			ioBindings.Stdout = f
+			closeFuncs = append(closeFuncs, func() { f.Close() })
+			i += 2
+			continue
 
-			return args[:i], true
+		}
 
+		newArgs = append(newArgs, arg)
+		i++
+
+	}
+
+	closeFunc := func() {
+		for _, c := range closeFuncs {
+			c()
 		}
 	}
 
-	return args, true
+	return newArgs, ioBindings, closeFunc, true
 
 }
 
