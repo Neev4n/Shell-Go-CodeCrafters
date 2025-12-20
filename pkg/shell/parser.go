@@ -173,6 +173,10 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 		return nil, ErrUnclosedQuote
 	}
 
+	if currState == stateDoubleQuote {
+		return nil, ErrUnclosedQuote
+	}
+
 	if escaping {
 		return nil, ErrUnescapedCharacter
 	}
