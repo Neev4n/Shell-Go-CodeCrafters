@@ -13,19 +13,26 @@ import (
 
 // exit error
 var ErrExit = errors.New("exit")
+var ErrMissingRedirectDesitination = errors.New("missing redirect destination")
 
 // type Builtin
 type Builtin func(args []string, s *Shell) error
 
+type RedirectBindings struct {
+	prevOut io.Writer
+	file    *os.File
+}
+
 // type Shell
 type Shell struct {
-	in       *bufio.Reader
-	Out      io.Writer
-	Err      io.Writer
-	pathDirs []string
-	builtins map[string]Builtin
-	executor Executor
-	parser   Parser
+	in              *bufio.Reader
+	Out             io.Writer
+	Err             io.Writer
+	pathDirs        []string
+	builtins        map[string]Builtin
+	executor        Executor
+	parser          Parser
+	redirectBinding RedirectBindings
 }
 
 // func New
@@ -43,6 +50,9 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 		Err:      errw,
 		pathDirs: dirs,
 		builtins: make(map[string]Builtin),
+		redirectBinding: RedirectBindings{
+			prevOut: out,
+		},
 	}
 
 	s.executor = &DefaultExecutuor{LookupFunc: s.Lookup}
@@ -55,6 +65,13 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 
 func (s *Shell) Run() error {
 	for {
+
+		if s.redirectBinding.file != nil {
+			s.Out = s.redirectBinding.prevOut
+			s.redirectBinding.file.Close()
+			s.redirectBinding.file = nil
+		}
+
 		fmt.Fprint(s.Out, "$ ")
 
 		line, err := s.in.ReadString('\n')
@@ -80,6 +97,39 @@ func (s *Shell) Run() error {
 			args = fields[1:]
 		}
 
+		// contains redirect
+		for i, arg := range args {
+			if arg == ">" || arg == "1>" {
+				if i == len(args)-1 {
+					fmt.Fprintln(s.Err, "redirect error:", ErrMissingRedirectDesitination)
+					break
+				}
+
+				dest := args[i+1]
+				path, ok := s.Lookup(dest)
+
+				if ok {
+					f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+					if err != nil {
+
+						fmt.Fprintf(s.Err, "open failed: %v", err)
+						break
+
+					}
+
+					s.redirectBinding.file = f
+					s.redirectBinding.prevOut = s.Out
+					s.Out = f
+
+					args = args[:i]
+
+					break
+
+				}
+
+			}
+		}
+
 		// check built ins
 		if fn, ok := s.builtins[cmd]; ok {
 			if err := fn(args, s); err != nil {
@@ -98,10 +148,11 @@ func (s *Shell) Run() error {
 			Stderr: s.Err,
 		}
 
+		//execute command
 		exitCode, err := s.executor.Execute(context.Background(), cmd, args, ioBinding)
 
 		if errors.Is(err, ErrNotFound) {
-			fmt.Fprintln(s.Out, cmd+": command not found")
+			fmt.Fprintln(s.Err, cmd+": command not found")
 			continue
 		}
 
