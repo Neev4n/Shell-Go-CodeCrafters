@@ -13,7 +13,7 @@ import (
 
 // exit error
 var ErrExit = errors.New("exit")
-var ErrMissingRedirectDesitination = errors.New("missing redirect destination")
+var ErrMissingRedirectDestination = errors.New("missing redirect destination")
 
 // type Builtin
 type Builtin func(args []string, s *Shell) error
@@ -97,37 +97,10 @@ func (s *Shell) Run() error {
 			args = fields[1:]
 		}
 
-		// contains redirect
-		for i, arg := range args {
-			if arg == ">" || arg == "1>" {
-				if i == len(args)-1 {
-					fmt.Fprintln(s.Err, "redirect error:", ErrMissingRedirectDesitination)
-					break
-				}
+		args, ok := s.updateForRedirect(args)
 
-				dest := args[i+1]
-				path, ok := s.Lookup(dest)
-
-				if ok {
-					f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-					if err != nil {
-
-						fmt.Fprintf(s.Err, "open failed: %v", err)
-						break
-
-					}
-
-					s.redirectBinding.file = f
-					s.redirectBinding.prevOut = s.Out
-					s.Out = f
-
-					args = args[:i]
-
-					break
-
-				}
-
-			}
+		if !ok {
+			continue
 		}
 
 		// check built ins
@@ -164,6 +137,39 @@ func (s *Shell) Run() error {
 		_ = exitCode
 
 	}
+
+}
+
+func (s *Shell) updateForRedirect(args []string) ([]string, bool) {
+
+	// contains redirect
+	for i, arg := range args {
+		if arg == ">" || arg == "1>" {
+			if i == len(args)-1 {
+				fmt.Fprintln(s.Err, "redirect error:", ErrMissingRedirectDestination)
+				return []string{}, false
+			}
+
+			dest := args[i+1]
+
+			f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err != nil {
+
+				fmt.Fprintf(s.Err, "open failed: %v", err)
+				return []string{}, false
+
+			}
+
+			s.redirectBinding.file = f
+			s.redirectBinding.prevOut = s.Out
+			s.Out = f
+
+			return args[:i], true
+
+		}
+	}
+
+	return args, true
 
 }
 
