@@ -148,10 +148,6 @@ func (s *Shell) Run() error {
 			continue
 		}
 
-		if cleanup != nil {
-			cleanup()
-		}
-
 		//execute command
 		exitCode, err := s.executor.Execute(context.Background(), cmd, cleanArgs, ioBindings)
 
@@ -163,6 +159,10 @@ func (s *Shell) Run() error {
 		if err != nil {
 			fmt.Fprintln(s.Err, "error running command:", err)
 			continue
+		}
+
+		if cleanup != nil {
+			cleanup()
 		}
 
 		_ = exitCode
