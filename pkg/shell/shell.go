@@ -53,11 +53,12 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 	}
 
 	shell := &Shell{
-		in:       bufio.NewReader(reader),
-		Out:      out,
-		Err:      errw,
-		pathDirs: dirs,
-		builtins: make(map[string]Builtin),
+		in:           bufio.NewReader(reader),
+		Out:          out,
+		Err:          errw,
+		pathDirs:     dirs,
+		builtins:     make(map[string]Builtin),
+		redirections: make(map[string]Redirection),
 	}
 
 	shell.executor = &DefaultExecutuor{LookupFunc: shell.Lookup}
