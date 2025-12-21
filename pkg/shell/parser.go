@@ -39,29 +39,29 @@ const (
 )
 
 type tokenBuffer struct {
-	b *strings.Builder
+	builder *strings.Builder
 }
 
-func newTokenBuffer(b *strings.Builder) *tokenBuffer {
-	tb := &tokenBuffer{
-		b: b,
+func newTokenBuffer(builder *strings.Builder) *tokenBuffer {
+	tokenBuffer := &tokenBuffer{
+		builder: builder,
 	}
 
-	return tb
+	return tokenBuffer
 }
 
-func (tb *tokenBuffer) isEmpty() bool {
-	return tb.b.Len() == 0
+func (tokenBuffer *tokenBuffer) isEmpty() bool {
+	return tokenBuffer.builder.Len() == 0
 }
 
-func (tb *tokenBuffer) appendRune(r rune) {
-	tb.b.WriteRune(r)
+func (tokenBuffer *tokenBuffer) appendRune(r rune) {
+	tokenBuffer.builder.WriteRune(r)
 }
 
-func (tb *tokenBuffer) flushIfNotEmpty(args []string) []string {
-	if !tb.isEmpty() {
-		s := tb.b.String()
-		tb.b.Reset()
+func (tokenBuffer *tokenBuffer) flushIfNotEmpty(args []string) []string {
+	if !tokenBuffer.isEmpty() {
+		s := tokenBuffer.builder.String()
+		tokenBuffer.builder.Reset()
 		args = append(args, s)
 	}
 
@@ -69,17 +69,17 @@ func (tb *tokenBuffer) flushIfNotEmpty(args []string) []string {
 
 }
 
-func handleStateOutside(ch rune, currState parseState, tb *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+func handleStateOutside(ch rune, currState parseState, tokenBuffer *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
 
 	if escaping {
-		tb.appendRune(ch)
+		tokenBuffer.appendRune(ch)
 		escaping = false
 		return currState, escaping, args
 	}
 
 	if unicode.IsSpace(ch) {
 
-		args = tb.flushIfNotEmpty(args)
+		args = tokenBuffer.flushIfNotEmpty(args)
 
 	} else if ch == '\'' {
 		currState = stateSingleQuote
@@ -89,34 +89,34 @@ func handleStateOutside(ch rune, currState parseState, tb *tokenBuffer, escaping
 	} else if ch == '\\' {
 		escaping = true
 	} else {
-		tb.appendRune(ch)
+		tokenBuffer.appendRune(ch)
 	}
 
 	return currState, escaping, args
 
 }
 
-func handleStateSingleQuote(ch rune, currState parseState, tb *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+func handleStateSingleQuote(ch rune, currState parseState, tokenBuffer *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
 
 	if ch == '\'' {
 		currState = stateOutside
 
 	} else {
-		tb.appendRune(ch)
+		tokenBuffer.appendRune(ch)
 	}
 
 	return currState, escaping, args
 
 }
 
-func handleStateDoubleQuote(ch rune, currState parseState, tb *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+func handleStateDoubleQuote(ch rune, currState parseState, tokenBuffer *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
 
 	if escaping {
 		if ch != '\\' && ch != '"' {
-			tb.appendRune('\\')
+			tokenBuffer.appendRune('\\')
 		}
 
-		tb.appendRune(ch)
+		tokenBuffer.appendRune(ch)
 
 		escaping = false
 		return currState, escaping, args
@@ -129,7 +129,7 @@ func handleStateDoubleQuote(ch rune, currState parseState, tb *tokenBuffer, esca
 	} else if ch == '\\' {
 		escaping = true
 	} else {
-		tb.appendRune(ch)
+		tokenBuffer.appendRune(ch)
 	}
 
 	return currState, escaping, args
@@ -137,8 +137,8 @@ func handleStateDoubleQuote(ch rune, currState parseState, tb *tokenBuffer, esca
 }
 
 func (p *DefaultParser) Parse(line string) ([]string, error) {
-	r := p.newReader(line)
-	tb := newTokenBuffer(p.newBuilder())
+	runeReader := p.newReader(line)
+	tokenBuffer := newTokenBuffer(p.newBuilder())
 
 	args := []string{}
 
@@ -146,7 +146,7 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 	escaping := false
 
 	for {
-		ch, _, err := r.ReadRune()
+		ch, _, err := runeReader.ReadRune()
 
 		if err == io.EOF {
 			break
@@ -158,22 +158,18 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 
 		switch currState {
 		case stateOutside:
-			currState, escaping, args = handleStateOutside(ch, currState, tb, escaping, args)
+			currState, escaping, args = handleStateOutside(ch, currState, tokenBuffer, escaping, args)
 
 		case stateSingleQuote:
-			currState, escaping, args = handleStateSingleQuote(ch, currState, tb, escaping, args)
+			currState, escaping, args = handleStateSingleQuote(ch, currState, tokenBuffer, escaping, args)
 
 		case stateDoubleQuote:
-			currState, escaping, args = handleStateDoubleQuote(ch, currState, tb, escaping, args)
+			currState, escaping, args = handleStateDoubleQuote(ch, currState, tokenBuffer, escaping, args)
 		}
 
 	}
 
-	if currState == stateSingleQuote {
-		return nil, ErrUnclosedQuote
-	}
-
-	if currState == stateDoubleQuote {
+	if currState == stateSingleQuote || currState == stateDoubleQuote {
 		return nil, ErrUnclosedQuote
 	}
 
@@ -181,7 +177,7 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 		return nil, ErrUnescapedCharacter
 	}
 
-	args = tb.flushIfNotEmpty(args)
+	args = tokenBuffer.flushIfNotEmpty(args)
 
 	return args, nil
 
