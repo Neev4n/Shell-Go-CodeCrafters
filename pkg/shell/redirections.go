@@ -191,13 +191,12 @@ func (rManager *RedirectionManager) ApplyRedirections(specs []RedirectionSpec, b
 		return baseBindings, nil, err
 	}
 
-	cleanupFuncs := []func()
+	cleanupFuncs := []func(){}
 
 	bindings := IOBindings{
-		Stdin: baseBindings.Stdin,
+		Stdin:  baseBindings.Stdin,
 		Stdout: baseBindings.Stdout,
 		Stderr: baseBindings.Stderr,
-
 	}
 
 	for _, spec := range specs {
@@ -205,9 +204,9 @@ func (rManager *RedirectionManager) ApplyRedirections(specs []RedirectionSpec, b
 		handler, _ := rManager.GetHandler(spec.Operator)
 
 		fn, err := handler.Apply(spec, &bindings, rManager.fileOpener)
-		
+
 		if err != nil {
-			
+
 			// clean up already existing functions
 			for _, c := range cleanupFuncs {
 				c()
@@ -217,18 +216,17 @@ func (rManager *RedirectionManager) ApplyRedirections(specs []RedirectionSpec, b
 		}
 
 		if fn != nil {
-            cleanupFuncs = append(cleanupFuncs, fn)
-        }
+			cleanupFuncs = append(cleanupFuncs, fn)
+		}
 
 	}
 
 	cleanup := func() {
-		for _, c := cleanupFuncs {
+		for _, c := range cleanupFuncs {
 			c()
 		}
 	}
 
 	return bindings, cleanup, nil
-
 
 }
