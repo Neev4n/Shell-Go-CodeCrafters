@@ -209,7 +209,7 @@ func (rManager *RedirectionManager) ApplyRedirections(specs []RedirectionSpec, b
 		if err != nil {
 			
 			// clean up already existing functions
-			for _, c := cleanupFuncs {
+			for _, c := range cleanupFuncs {
 				c()
 			}
 
