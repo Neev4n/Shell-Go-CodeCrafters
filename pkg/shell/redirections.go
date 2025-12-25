@@ -37,7 +37,7 @@ type ParsedCommand struct {
 // handles each type of redirection
 type RedirectionHandler interface {
 	CanHandle(operator string) bool                                                                           // check for operator
-	Validate(redirection RedirectionSpec) error                                                               // check if this redirection is possible
+	Validate(spec RedirectionSpec) error                                                                      // check if this redirection is possible
 	Apply(redirection RedirectionSpec, ioBindings *IOBindings, opener FileOpener) (cleanup func(), err error) // apply redirection to bindings
 
 }
@@ -55,15 +55,15 @@ func (handler *StdoutRedirectionHandler) CanHandle(operator string) bool {
 	return operator == ">>" || operator == "1>>"
 }
 
-func (handler *StdoutRedirectionHandler) Validate(redirection RedirectionSpec) error {
-	if redirection.Target == "" {
+func (handler *StdoutRedirectionHandler) Validate(spec RedirectionSpec) error {
+	if spec.Target == "" {
 		return ErrMissingRedirectDestination
 	}
 
 	return nil
 }
 
-func (handler *StdoutRedirectionHandler) Apply(redirection RedirectionSpec, ioBindings *IOBindings, opener FileOpener) (cleanup func(), err error) {
+func (handler *StdoutRedirectionHandler) Apply(spec RedirectionSpec, ioBindings *IOBindings, opener FileOpener) (cleanup func(), err error) {
 
 	flag := os.O_CREATE | os.O_WRONLY
 
@@ -73,13 +73,162 @@ func (handler *StdoutRedirectionHandler) Apply(redirection RedirectionSpec, ioBi
 		flag |= os.O_APPEND
 	}
 
-	file, err := opener.OpenWrite(redirection.Target, flag, 0644)
+	file, err := opener.OpenWrite(spec.Target, flag, 0644)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to open %s: %w", redirection.Target, err)
+		return nil, fmt.Errorf("failed to open %s: %w", spec.Target, err)
 	}
 
 	ioBindings.Stdout = file
 	return func() { file.Close() }, nil
+
+}
+
+// handle stderr redirections
+type StderrRedirectionHandler struct {
+	Overwrite bool
+}
+
+func (handler *StderrRedirectionHandler) CanHandle(operator string) bool {
+	if handler.Overwrite {
+		return operator == "2>"
+	}
+
+	return operator == "2>>"
+}
+
+func (handler *StderrRedirectionHandler) Validate(spec RedirectionSpec) error {
+	if spec.Target == "" {
+		return ErrMissingRedirectDestination
+	}
+
+	return nil
+}
+
+func (handler *StderrRedirectionHandler) Apply(spec RedirectionSpec, ioBindings *IOBindings, opener FileOpener) (cleanup func(), err error) {
+
+	flag := os.O_CREATE | os.O_WRONLY
+
+	if handler.Overwrite {
+		flag |= os.O_TRUNC
+	} else {
+		flag |= os.O_APPEND
+	}
+
+	file, err := opener.OpenWrite(spec.Target, flag, 0644)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to open %s: %w", spec.Target, err)
+	}
+
+	ioBindings.Stderr = file
+	return func() { file.Close() }, nil
+
+}
+
+// shell holds a redirection manager
+type RedirectionManager struct {
+	handlers   []RedirectionHandler
+	fileOpener FileOpener
+}
+
+// find the handler for a given operator
+func (rManager *RedirectionManager) GetHandler(operator string) (RedirectionHandler, error) {
+
+	for _, handler := range rManager.handlers {
+		if handler.CanHandle(operator) {
+			return handler, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unsupported redirection operator: %s", operator)
+
+}
+
+func NewRedirectionManager(fileOpener FileOpener) *RedirectionManager {
+
+	rManager := &RedirectionManager{
+		handlers:   []RedirectionHandler{},
+		fileOpener: fileOpener,
+	}
+
+	rManager.RegisterHandler(&StdoutRedirectionHandler{Overwrite: true})
+	rManager.RegisterHandler(&StdoutRedirectionHandler{Overwrite: false})
+	rManager.RegisterHandler(&StderrRedirectionHandler{Overwrite: true})
+	rManager.RegisterHandler(&StderrRedirectionHandler{Overwrite: false})
+
+	return rManager
+
+}
+
+func (rManager *RedirectionManager) RegisterHandler(handler RedirectionHandler) {
+	rManager.handlers = append(rManager.handlers, handler)
+}
+
+func (rManager *RedirectionManager) ValidateSpecs(specs []RedirectionSpec) error {
+
+	for _, spec := range specs {
+
+		handler, err := rManager.GetHandler(spec.Operator)
+
+		if err != nil {
+			return err
+		}
+
+		if err := handler.Validate(spec); err != nil {
+			return fmt.Errorf("invalid redirection '%s %s': %w", spec.Operator, spec.Target, err)
+		}
+
+	}
+
+	return nil
+
+}
+
+func (rManager *RedirectionManager) ApplyRedirections(specs []RedirectionSpec, baseBindings IOBindings) (IOBindings, func(), error) {
+
+	if err := rManager.ValidateSpecs(specs); err != nil {
+		return baseBindings, nil, err
+	}
+
+	cleanupFuncs := []func()
+
+	bindings := IOBindings{
+		Stdin: baseBindings.Stdin,
+		Stdout: baseBindings.Stdout,
+		Stderr: baseBindings.Stderr,
+
+	}
+
+	for _, spec := range specs {
+
+		handler, _ := rManager.GetHandler(spec.Operator)
+
+		fn, err := handler.Apply(spec, &bindings, rManager.fileOpener)
+		
+		if err != nil {
+			
+			// clean up already existing functions
+			for _, c := cleanupFuncs {
+				c()
+			}
+
+			return baseBindings, nil, err
+		}
+
+		if fn != nil {
+            cleanupFuncs = append(cleanupFuncs, fn)
+        }
+
+	}
+
+	cleanup := func() {
+		for _, c := cleanupFuncs {
+			c()
+		}
+	}
+
+	return bindings, cleanup, nil
+
 
 }
