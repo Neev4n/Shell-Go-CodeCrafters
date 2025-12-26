@@ -7,6 +7,10 @@ import (
 	"unicode"
 )
 
+type Parser interface {
+	Parse(line string) ([]string, error)
+}
+
 var (
 	ErrUnclosedQuote      = errors.New("unclosed quote")
 	ErrUnescapedCharacter = errors.New("unescaped character")
@@ -69,12 +73,12 @@ func (tokenBuffer *tokenBuffer) flushIfNotEmpty(args []string) []string {
 
 }
 
-func handleStateOutside(ch rune, currState parseState, tokenBuffer *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+func handleStateOutside(ch rune, currState parseState, tokenBuffer *tokenBuffer, isEscaping bool, args []string) (parseState, bool, []string) {
 
-	if escaping {
+	if isEscaping {
 		tokenBuffer.appendRune(ch)
-		escaping = false
-		return currState, escaping, args
+		isEscaping = false
+		return currState, isEscaping, args
 	}
 
 	if unicode.IsSpace(ch) {
@@ -87,16 +91,16 @@ func handleStateOutside(ch rune, currState parseState, tokenBuffer *tokenBuffer,
 	} else if ch == '"' {
 		currState = stateDoubleQuote
 	} else if ch == '\\' {
-		escaping = true
+		isEscaping = true
 	} else {
 		tokenBuffer.appendRune(ch)
 	}
 
-	return currState, escaping, args
+	return currState, isEscaping, args
 
 }
 
-func handleStateSingleQuote(ch rune, currState parseState, tokenBuffer *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+func handleStateSingleQuote(ch rune, currState parseState, tokenBuffer *tokenBuffer, isEscaping bool, args []string) (parseState, bool, []string) {
 
 	if ch == '\'' {
 		currState = stateOutside
@@ -105,21 +109,21 @@ func handleStateSingleQuote(ch rune, currState parseState, tokenBuffer *tokenBuf
 		tokenBuffer.appendRune(ch)
 	}
 
-	return currState, escaping, args
+	return currState, isEscaping, args
 
 }
 
-func handleStateDoubleQuote(ch rune, currState parseState, tokenBuffer *tokenBuffer, escaping bool, args []string) (parseState, bool, []string) {
+func handleStateDoubleQuote(ch rune, currState parseState, tokenBuffer *tokenBuffer, isEscaping bool, args []string) (parseState, bool, []string) {
 
-	if escaping {
+	if isEscaping {
 		if ch != '\\' && ch != '"' {
 			tokenBuffer.appendRune('\\')
 		}
 
 		tokenBuffer.appendRune(ch)
 
-		escaping = false
-		return currState, escaping, args
+		isEscaping = false
+		return currState, isEscaping, args
 
 	}
 
@@ -127,12 +131,12 @@ func handleStateDoubleQuote(ch rune, currState parseState, tokenBuffer *tokenBuf
 		currState = stateOutside
 
 	} else if ch == '\\' {
-		escaping = true
+		isEscaping = true
 	} else {
 		tokenBuffer.appendRune(ch)
 	}
 
-	return currState, escaping, args
+	return currState, isEscaping, args
 
 }
 
@@ -143,7 +147,7 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 	args := []string{}
 
 	currState := stateOutside
-	escaping := false
+	isEscaping := false
 
 	for {
 		ch, _, err := runeReader.ReadRune()
@@ -158,13 +162,13 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 
 		switch currState {
 		case stateOutside:
-			currState, escaping, args = handleStateOutside(ch, currState, tokenBuffer, escaping, args)
+			currState, isEscaping, args = handleStateOutside(ch, currState, tokenBuffer, isEscaping, args)
 
 		case stateSingleQuote:
-			currState, escaping, args = handleStateSingleQuote(ch, currState, tokenBuffer, escaping, args)
+			currState, isEscaping, args = handleStateSingleQuote(ch, currState, tokenBuffer, isEscaping, args)
 
 		case stateDoubleQuote:
-			currState, escaping, args = handleStateDoubleQuote(ch, currState, tokenBuffer, escaping, args)
+			currState, isEscaping, args = handleStateDoubleQuote(ch, currState, tokenBuffer, isEscaping, args)
 		}
 
 	}
@@ -173,7 +177,7 @@ func (p *DefaultParser) Parse(line string) ([]string, error) {
 		return nil, ErrUnclosedQuote
 	}
 
-	if escaping {
+	if isEscaping {
 		return nil, ErrUnescapedCharacter
 	}
 
