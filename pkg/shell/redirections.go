@@ -130,6 +130,7 @@ func (handler *StderrRedirectionHandler) Apply(spec RedirectionSpec, ioBindings 
 type RedirectionManager struct {
 	handlers   []RedirectionHandler
 	fileOpener FileOpener
+	knownOps   []string
 }
 
 // find the handler for a given operator
@@ -150,15 +151,33 @@ func NewRedirectionManager(fileOpener FileOpener) *RedirectionManager {
 	rManager := &RedirectionManager{
 		handlers:   []RedirectionHandler{},
 		fileOpener: fileOpener,
+		knownOps:   []string{},
 	}
 
+	// > , 1>
 	rManager.RegisterHandler(&StdoutRedirectionHandler{Overwrite: true})
+	rManager.RegisterKnownOperator(">")
+	rManager.RegisterKnownOperator("1>")
+
+	// >> , 1>>
 	rManager.RegisterHandler(&StdoutRedirectionHandler{Overwrite: false})
+	rManager.RegisterKnownOperator(">>")
+	rManager.RegisterKnownOperator("1>>")
+
+	// 2>
 	rManager.RegisterHandler(&StderrRedirectionHandler{Overwrite: true})
+	rManager.RegisterKnownOperator("2>")
+
+	// 2>>
 	rManager.RegisterHandler(&StderrRedirectionHandler{Overwrite: false})
+	rManager.RegisterKnownOperator("2>>")
 
 	return rManager
 
+}
+
+func (rManager *RedirectionManager) RegisterKnownOperator(operator string) {
+	rManager.knownOps = append(rManager.knownOps, operator)
 }
 
 func (rManager *RedirectionManager) RegisterHandler(handler RedirectionHandler) {
@@ -228,5 +247,63 @@ func (rManager *RedirectionManager) ApplyRedirections(specs []RedirectionSpec, b
 	}
 
 	return bindings, cleanup, nil
+
+}
+
+type ArgumentParser struct {
+	operators map[string]bool
+}
+
+func NewArgumentParser(rManager *RedirectionManager) *ArgumentParser {
+
+	argParser := &ArgumentParser{
+		operators: make(map[string]bool),
+	}
+
+	for _, op := range rManager.knownOps {
+		argParser.operators[op] = true
+	}
+
+	return argParser
+
+}
+
+func (argumentParser *ArgumentParser) Parse(args []string) (ParsedCommand, error) {
+
+	parsedCommand := ParsedCommand{
+		Args:         []string{},
+		Redirections: []RedirectionSpec{},
+	}
+
+	i := 0
+
+	for _, arg := range args {
+
+		// is a known operator -> append
+		if argumentParser.operators[arg] {
+
+			// if there is no target then return error
+			if i == len(args)-1 {
+				return parsedCommand, fmt.Errorf("missing target for redirection '%s' at position %d", arg, i)
+			}
+
+			spec := RedirectionSpec{
+				Operator: arg,
+				Target:   args[i+1],
+				Index:    i,
+			}
+
+			parsedCommand.Redirections = append(parsedCommand.Redirections, spec)
+			i += 2
+			continue
+
+		}
+
+		parsedCommand.Args = append(parsedCommand.Args, arg)
+		i++
+
+	}
+
+	return parsedCommand, nil
 
 }
