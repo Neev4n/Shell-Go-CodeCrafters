@@ -1,10 +1,23 @@
 package shell
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 )
+
+// ErrMissingRedirectDestination is returned when a redirection operator
+// is encountered without a following target file path.
+//
+// This error occurs during argument parsing when a command ends with a
+// redirection operator that requires a target.
+//
+// Example command that triggers this error:
+//
+//	$ echo hello >
+//	parse error: missing target for redirection '>' at position 2
+var ErrMissingRedirectDestination = errors.New("missing redirect destination")
 
 type FileOpener interface {
 	OpenRead(name string) (io.ReadCloser, error)
