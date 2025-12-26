@@ -26,21 +26,22 @@ const (
 	err
 )
 
-type Redirection struct {
-	redirectType redirectType
-	flag         int
-}
+// type Redirection struct {
+// 	redirectType redirectType
+// 	flag         int
+// }
 
 // type Shell
 type Shell struct {
-	in           *bufio.Reader
-	Out          io.Writer
-	Err          io.Writer
-	pathDirs     []string
-	builtins     map[string]Builtin
-	redirections map[string]Redirection
-	executor     Executor
-	parser       Parser
+	in                 *bufio.Reader
+	Out                io.Writer
+	Err                io.Writer
+	pathDirs           []string
+	builtins           map[string]Builtin
+	executor           Executor
+	parser             Parser
+	argumentParser     *ArgumentParser
+	redirectionManager *RedirectionManager
 }
 
 // func New
@@ -53,18 +54,19 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 	}
 
 	shell := &Shell{
-		in:           bufio.NewReader(reader),
-		Out:          out,
-		Err:          errw,
-		pathDirs:     dirs,
-		builtins:     make(map[string]Builtin),
-		redirections: make(map[string]Redirection),
+		in:       bufio.NewReader(reader),
+		Out:      out,
+		Err:      errw,
+		pathDirs: dirs,
+		builtins: make(map[string]Builtin),
 	}
 
 	shell.executor = &DefaultExecutuor{LookupFunc: shell.Lookup}
 	shell.parser = NewDefaultParser()
+	shell.redirectionManager = NewRedirectionManager(&DefaultFileOpener{})
+	shell.argumentParser = NewArgumentParser(shell.redirectionManager)
 	shell.registerBuiltins()
-	shell.registerRedirections()
+	//shell.registerRedirections()
 	return shell
 }
 
@@ -98,9 +100,18 @@ func (shell *Shell) Run() error {
 			args = parsedArgs[1:]
 		}
 
-		cleanArgs, ioBindings, cleanup, ok := shell.prepareIOforRedirection(args)
+		parsedCommand, err := shell.argumentParser.Parse(args)
 
-		if !ok {
+		baseBindings := &IOBindings{
+			Stdin:  shell.in,
+			Stdout: shell.Out,
+			Stderr: shell.Err,
+		}
+
+		ioBindings, cleanup, err := shell.redirectionManager.ApplyRedirections(parsedCommand.Redirections, *baseBindings)
+
+		if err != nil {
+			fmt.Fprintln(shell.Err, "redirection error:", err)
 			continue
 		}
 
@@ -108,49 +119,43 @@ func (shell *Shell) Run() error {
 			defer cleanup()
 		}
 
-		// check built ins
+		// Execute builtin or external command
 		if builtinFunc, ok := shell.builtins[command]; ok {
-
-			prevErr := shell.Err
+			// Temporarily swap shell I/O for builtins
 			prevOut := shell.Out
+			prevErr := shell.Err
 
-			if ioBindings.Stderr != nil {
-				shell.Err = ioBindings.Stderr
-			}
+			shell.Out = ioBindings.Stdout
+			shell.Err = ioBindings.Stderr
 
-			if ioBindings.Stdout != nil {
-				shell.Out = ioBindings.Stdout
-			}
+			err := builtinFunc(parsedCommand.Args, shell)
 
-			if err := builtinFunc(cleanArgs, shell); err != nil {
+			// Restore original I/O
+			shell.Out = prevOut
+			shell.Err = prevErr
 
-				shell.Out = prevOut
-				shell.Err = prevErr
+			if err != nil {
 
+				// if exiting run clean up
 				if errors.Is(err, ErrExit) {
-
 					if cleanup != nil {
 						cleanup()
 					}
-
 					return nil
 				}
 
+				// else it is a built in error
 				fmt.Fprintln(shell.Err, "builtin error:", err)
-			} else {
-				shell.Out = prevOut
-				shell.Err = prevErr
 			}
 
 			if cleanup != nil {
 				cleanup()
 			}
-
 			continue
 		}
 
 		//execute command
-		exitCode, err := shell.executor.Execute(context.Background(), command, cleanArgs, ioBindings)
+		exitCode, err := shell.executor.Execute(context.Background(), command, parsedCommand.Args, ioBindings)
 
 		if errors.Is(err, ErrNotFound) {
 			fmt.Fprintln(shell.Err, command+": command not found")
@@ -172,68 +177,6 @@ func (shell *Shell) Run() error {
 
 }
 
-func (shell *Shell) prepareIOforRedirection(args []string) ([]string, IOBindings, func(), bool) {
-
-	ioBindings := IOBindings{
-		Stdin:  nil,
-		Stdout: shell.Out,
-		Stderr: shell.Err,
-	}
-
-	newArgs := make([]string, 0, len(args))
-	var closeFuncs []func()
-
-	i := 0
-
-	for i < len(args) {
-
-		arg := args[i]
-
-		if redirection, ok := shell.redirections[arg]; ok {
-
-			if i == len(args)-1 {
-				fmt.Fprintln(shell.Err, "redirect error:", ErrMissingRedirectDestination)
-				return nil, ioBindings, nil, false
-			}
-
-			dest := args[i+1]
-
-			file, error := os.OpenFile(dest, redirection.flag, 0644)
-			if error != nil {
-
-				fmt.Fprintf(shell.Err, "open failed: %v", error)
-				return nil, ioBindings, nil, false
-
-			}
-
-			switch redirection.redirectType {
-			case out:
-				ioBindings.Stdout = file
-			case err:
-				ioBindings.Stderr = file
-			}
-
-			closeFuncs = append(closeFuncs, func() { file.Close() })
-			i += 2
-			continue
-
-		}
-
-		newArgs = append(newArgs, arg)
-		i++
-
-	}
-
-	closeFunc := func() {
-		for _, c := range closeFuncs {
-			c()
-		}
-	}
-
-	return newArgs, ioBindings, closeFunc, true
-
-}
-
 // func Lookup
 func (shell *Shell) Lookup(name string) (string, bool) {
 
@@ -249,40 +192,6 @@ func (shell *Shell) Lookup(name string) (string, bool) {
 	}
 
 	return "", false
-
-}
-
-func (shell *Shell) registerRedirections() {
-
-	overwriteOut := Redirection{
-		redirectType: out,
-		flag:         os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
-	}
-
-	overwriteErr := Redirection{
-		redirectType: err,
-		flag:         os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
-	}
-
-	appendOut := Redirection{
-		redirectType: out,
-		flag:         os.O_CREATE | os.O_WRONLY | os.O_APPEND,
-	}
-
-	appendErr := Redirection{
-		redirectType: err,
-		flag:         os.O_CREATE | os.O_WRONLY | os.O_APPEND,
-	}
-
-	shell.redirections[">"] = overwriteOut
-	shell.redirections["1>"] = overwriteOut
-
-	shell.redirections["2>"] = overwriteErr
-
-	shell.redirections[">>"] = appendOut
-	shell.redirections["1>>"] = appendOut
-
-	shell.redirections["2>>"] = appendErr
 
 }
 
