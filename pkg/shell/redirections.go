@@ -277,8 +277,9 @@ func (argumentParser *ArgumentParser) Parse(args []string) (ParsedCommand, error
 
 	i := 0
 
-	for _, arg := range args {
+	for i < len(args) {
 
+		arg := args[i]
 		// is a known operator -> append
 		if argumentParser.operators[arg] {
 
