@@ -188,7 +188,7 @@ func New(reader io.Reader, out, errw io.Writer) *Shell {
 		builtins: make(map[string]Builtin),
 	}
 
-	shell.executor = &DefaultExecutuor{LookupFunc: shell.Lookup}
+	shell.executor = &DefaultExecutor{LookupFunc: shell.Lookup}
 	shell.parser = NewDefaultParser()
 	shell.redirectionManager = NewRedirectionManager(&DefaultFileOpener{})
 	shell.argumentParser = NewArgumentParser(shell.redirectionManager)
