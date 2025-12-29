@@ -548,34 +548,6 @@ $ echo test > output.txt
 | `0` | Success | `exit` command or normal termination |
 | `1` | Fatal error | I/O error, parse error |
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### Development Setup
-
-1. Fork the repository
-2. Clone your fork: 
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/Shell-Go-CodeCrafters. git
-   ```
-3. Create a feature branch:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-4. Make your changes and add tests
-5. Run tests:
-   ```bash
-   go test ./...
-   ```
-6. Commit and push:
-   ```bash
-   git add .
-   git commit -m "Add your feature"
-   git push origin feature/your-feature-name
-   ```
-7. Open a Pull Request
-
 ### Code Style
 
 - Follow standard Go formatting (`gofmt`)
