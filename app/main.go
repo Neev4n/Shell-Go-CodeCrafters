@@ -1,5 +1,3 @@
-package main
-
 // Command shell is an interactive command-line shell implementation.
 //
 // The shell provides a REPL (Read-Eval-Print Loop) interface for executing
@@ -153,6 +151,8 @@ package main
 // # Naveen
 //
 // Created as part of CodeCrafters Shell Challenge
+
+package main
 
 import (
 	"fmt"
